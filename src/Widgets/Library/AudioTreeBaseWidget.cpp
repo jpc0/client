@@ -44,7 +44,7 @@ void AudioTreeBaseWidget::mouseMoveEvent(QMouseEvent* event)
     foreach (QTreeWidgetItem* item, QTreeWidget::selectedItems())
     {
         data.append(QString("<%1>,,%2,,%3,,%4,,%5,,%6,,%7,,%8;").arg(this->objectName())
-                                                                .arg(item->text(0))
+                                                                .arg(item->text(7))
                                                                 .arg(item->text(1))
                                                                 .arg(item->text(2))
                                                                 .arg(item->text(3))

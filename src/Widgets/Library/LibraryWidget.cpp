@@ -31,6 +31,7 @@
 #include <QtWidgets/QApplication>
 #include <QtWidgets/QTreeWidgetItem>
 #include <QtWidgets/QFileDialog>
+#include <qmap.h>
 
 LibraryWidget::LibraryWidget(QWidget* parent)
     : QWidget(parent)
@@ -46,12 +47,14 @@ LibraryWidget::LibraryWidget(QWidget* parent)
     this->treeWidgetTool->setColumnHidden(5, true);
     this->treeWidgetTool->setColumnHidden(6, true);
 
+    this->treeWidgetAudio->header()->setSectionResizeMode(0, QHeaderView::Stretch);
     this->treeWidgetAudio->setColumnHidden(1, true);
     this->treeWidgetAudio->setColumnHidden(2, true);
     this->treeWidgetAudio->setColumnHidden(3, true);
     this->treeWidgetAudio->setColumnHidden(4, true);
     this->treeWidgetAudio->setColumnHidden(5, true);
-    this->treeWidgetAudio->setColumnHidden(6, true);
+    this->treeWidgetVideo->setColumnWidth(6, 75);
+    this->treeWidgetAudio->setColumnHidden(7, true);
 
     this->treeWidgetImage->setColumnHidden(1, true);
     this->treeWidgetImage->setColumnHidden(2, true);
@@ -59,6 +62,7 @@ LibraryWidget::LibraryWidget(QWidget* parent)
     this->treeWidgetImage->setColumnHidden(4, true);
     this->treeWidgetImage->setColumnHidden(5, true);
     this->treeWidgetImage->setColumnHidden(6, true);
+    this->treeWidgetImage->setColumnHidden(7, true);
 
     this->treeWidgetTemplate->setColumnHidden(1, true);
     this->treeWidgetTemplate->setColumnHidden(2, true);
@@ -74,6 +78,7 @@ LibraryWidget::LibraryWidget(QWidget* parent)
     this->treeWidgetVideo->setColumnHidden(4, true);
     this->treeWidgetVideo->setColumnHidden(5, true);
     this->treeWidgetVideo->setColumnWidth(6, 75);
+    this->treeWidgetVideo->setColumnHidden(7, true);
 
     this->treeWidgetData->setColumnHidden(1, true);
     this->treeWidgetData->setColumnHidden(2, true);
@@ -156,6 +161,7 @@ void LibraryWidget::setupTools()
     widgetMovie->setText(4, Rundown::MOVIE);
     widgetMovie->setText(5, "0");
     widgetMovie->setText(6, "");
+    widgetMovie->setText(7, "Video");
 
     QTreeWidgetItem* widgetAnchor = new QTreeWidgetItem(this->treeWidgetTool->topLevelItem(1));
     widgetAnchor->setIcon(0, QIcon(":/Graphics/Images/AnchorSmall.png"));
@@ -502,6 +508,11 @@ void LibraryWidget::repositoryRundown(const RepositoryRundownEvent& event)
     this->treeWidgetPreset->setEnabled(!this->lock);
 }
 
+struct TreeItem {
+	QTreeWidgetItem* item;
+	std::map<QString, std::shared_ptr<TreeItem>> children;
+};
+
 void LibraryWidget::mediaChanged(const MediaChangedEvent& event)
 {
     Q_UNUSED(event);
@@ -520,66 +531,201 @@ void LibraryWidget::mediaChanged(const MediaChangedEvent& event)
     else
         models = DatabaseManager::getInstance().getLibraryMediaByFilter(this->lineEditFilter->text(), dynamic_cast<DeviceFilterWidget*>(this->widgetDeviceFilter)->getDeviceFilter());
 
+	// We need the guarantee that iterators are not invalidated
+	std::map<QString, std::shared_ptr<TreeItem>> audio_tree;
+	std::map<QString, std::shared_ptr<TreeItem>> image_tree;
+	std::map<QString, std::shared_ptr<TreeItem>> movie_tree;
+
     if (models.count() > 0)
     {
         foreach (LibraryModel model, models)
         {
             if (model.getType() == "AUDIO")
             {
-                QTreeWidgetItem* widget = new QTreeWidgetItem(this->treeWidgetAudio);
-                widget->setIcon(0, QIcon(":/Graphics/Images/AudioSmall.png"));
-                widget->setText(0, model.getName());
-                widget->setText(1, QString("%1").arg(model.getId()));
-                widget->setText(2, model.getLabel());
-                widget->setText(3, model.getDeviceName());
-                widget->setText(4, model.getType());
-                widget->setText(5, QString("%1").arg(model.getThumbnailId()));
+				auto create_model = [&](QString name, auto* parent){
+					QTreeWidgetItem* widget = new QTreeWidgetItem(parent);
+					widget->setIcon(0, QIcon(":/Graphics/Images/AudioSmall.png"));
+					widget->setText(0, name);
+					widget->setText(1, QString("%1").arg(model.getId()));
+					widget->setText(2, model.getLabel());
+					widget->setText(3, model.getDeviceName());
+					widget->setText(4, model.getType());
+					widget->setText(5, QString("%1").arg(model.getThumbnailId()));
+					widget->setText(7, model.getName());
 
-                if (this->useDropFrameNotation)
-                {
-                    QString timecode = model.getTimecode();
-                    widget->setText(6, timecode.replace(model.getTimecode().lastIndexOf(":"), 1, "."));
-                }
-                else
-                    widget->setText(6, model.getTimecode());
+					if (this->useDropFrameNotation)
+					{
+						QString timecode = model.getTimecode();
+						widget->setText(6, timecode.replace(model.getTimecode().lastIndexOf(":"), 1, "."));
+					}
+					else
+						widget->setText(6, model.getTimecode());
+				};
+				if (model.getName().contains('/')) {
+					this->treeWidgetAudio->setRootIsDecorated(true);
+					std::shared_ptr<TreeItem> parent = nullptr;
+					auto parts = model.getName().split('/');
+					for (auto i = 0; i < parts.length(); i++) {
+						if (i == parts.length() - 1) {
+							create_model(parts[i],parent->item);
+							break;
+						}
+						if (parent == nullptr) {
+							if (audio_tree.find(parts[i]) != audio_tree.end()) {
+								parent = audio_tree.at(parts[i]);
+								continue;
+							}
+							QTreeWidgetItem* widget = new QTreeWidgetItem(this->treeWidgetAudio);
+							widget->setText(0, parts[i]);
+							widget->setChildIndicatorPolicy(QTreeWidgetItem::ChildIndicatorPolicy::ShowIndicator);
+							auto item = std::make_shared<TreeItem>();
+							item->item = widget;
+							auto iter = audio_tree.insert({parts[i], item});
+							parent = item;
+							continue;
+						} else {
+							if (parent->children.find(parts[i]) != parent->children.end()) {
+								parent = parent->children.at(parts[i]);
+								continue;
+							}
+							QTreeWidgetItem* widget = new QTreeWidgetItem(parent->item);
+							widget->setText(0, parts[i]);
+							widget->setChildIndicatorPolicy(QTreeWidgetItem::ChildIndicatorPolicy::ShowIndicator);
+							auto item = std::make_shared<TreeItem>();
+							item->item = widget;
+							auto iter = parent->children.insert({parts[i], item});
+							parent = item;
+						}
+					}
+					
+				} else {
+					create_model(model.getName(),this->treeWidgetAudio);
+				}
             }
             else if (model.getType() == "STILL")
             {
-                QTreeWidgetItem* widget = new QTreeWidgetItem(this->treeWidgetImage);
-                widget->setIcon(0, QIcon(":/Graphics/Images/StillSmall.png"));
-                widget->setText(0, model.getName());
-                widget->setText(1, QString("%1").arg(model.getId()));
-                widget->setText(2, model.getLabel());
-                widget->setText(3, model.getDeviceName());
-                widget->setText(4, model.getType());
-                widget->setText(5, QString("%1").arg(model.getThumbnailId()));
 
-                if (this->useDropFrameNotation)
-                {
-                    QString timecode = model.getTimecode();
-                    widget->setText(6, timecode.replace(model.getTimecode().lastIndexOf(":"), 1, "."));
-                }
-                else
-                    widget->setText(6, model.getTimecode());
+				auto create_model = [&](QString name, auto* parent){
+					QTreeWidgetItem* widget = new QTreeWidgetItem(parent);
+					widget->setIcon(0, QIcon(":/Graphics/Images/StillSmall.png"));
+					widget->setText(0, name);
+					widget->setText(1, QString("%1").arg(model.getId()));
+					widget->setText(2, model.getLabel());
+					widget->setText(3, model.getDeviceName());
+					widget->setText(4, model.getType());
+					widget->setText(5, QString("%1").arg(model.getThumbnailId()));
+					widget->setText(7, model.getName());
+
+					if (this->useDropFrameNotation)
+					{
+						QString timecode = model.getTimecode();
+						widget->setText(6, timecode.replace(model.getTimecode().lastIndexOf(":"), 1, "."));
+					}
+					else
+						widget->setText(6, model.getTimecode());
+				};
+				if (model.getName().contains('/')) {
+					this->treeWidgetImage->setRootIsDecorated(true);
+					std::shared_ptr<TreeItem> parent = nullptr;
+					auto parts = model.getName().split('/');
+					for (auto i = 0; i < parts.length(); i++) {
+						if (i == parts.length() - 1) {
+							create_model(parts[i],parent->item);
+							break;
+						}
+						if (parent == nullptr) {
+							if (image_tree.find(parts[i]) != image_tree.end()) {
+								parent = image_tree.at(parts[i]);
+								continue;
+							}
+							QTreeWidgetItem* widget = new QTreeWidgetItem(this->treeWidgetImage);
+							widget->setText(0, parts[i]);
+							widget->setChildIndicatorPolicy(QTreeWidgetItem::ChildIndicatorPolicy::ShowIndicator);
+							auto item = std::make_shared<TreeItem>();
+							item->item = widget;
+							auto iter = image_tree.insert({parts[i], item});
+							parent = item;
+							continue;
+						} else {
+							if (parent->children.find(parts[i]) != parent->children.end()) {
+								parent = parent->children.at(parts[i]);
+								continue;
+							}
+							QTreeWidgetItem* widget = new QTreeWidgetItem(parent->item);
+							widget->setText(0, parts[i]);
+							widget->setChildIndicatorPolicy(QTreeWidgetItem::ChildIndicatorPolicy::ShowIndicator);
+							auto item = std::make_shared<TreeItem>();
+							item->item = widget;
+							auto iter = parent->children.insert({parts[i], item});
+							parent = item;
+						}
+					}
+				} else {
+					create_model(model.getName(),this->treeWidgetImage);
+				}
             }
             else if (model.getType() == "MOVIE")
             {
-                QTreeWidgetItem* widget = new QTreeWidgetItem(this->treeWidgetVideo);
-                widget->setIcon(0, QIcon(":/Graphics/Images/MovieSmall.png"));
-                widget->setText(0, model.getName());
-                widget->setText(1, QString("%1").arg(model.getId()));
-                widget->setText(2, model.getLabel());
-                widget->setText(3, model.getDeviceName());
-                widget->setText(4, model.getType());
-                widget->setText(5, QString("%1").arg(model.getThumbnailId()));
 
-                if (this->useDropFrameNotation)
-                {
-                    QString timecode = model.getTimecode();
-                    widget->setText(6, timecode.replace(model.getTimecode().lastIndexOf(":"), 1, "."));
-                }
-                else
-                    widget->setText(6, model.getTimecode());
+				auto create_model = [&](QString name, auto parent){
+					QTreeWidgetItem* widget = new QTreeWidgetItem(parent);
+					widget->setIcon(0, QIcon(":/Graphics/Images/MovieSmall.png"));
+					widget->setText(0, name);
+					widget->setText(1, QString("%1").arg(model.getId()));
+					widget->setText(2, model.getLabel());
+					widget->setText(3, model.getDeviceName());
+					widget->setText(4, model.getType());
+					widget->setText(5, QString("%1").arg(model.getThumbnailId()));
+					widget->setText(7, model.getName());
+
+					if (this->useDropFrameNotation)
+					{
+						QString timecode = model.getTimecode();
+						widget->setText(6, timecode.replace(model.getTimecode().lastIndexOf(":"), 1, "."));
+					}
+					else
+						widget->setText(6, model.getTimecode());
+				};
+
+				if (model.getName().contains('/')) {
+					this->treeWidgetVideo->setRootIsDecorated(true);
+					std::shared_ptr<TreeItem> parent = nullptr;
+					auto parts = model.getName().split('/');
+					for (auto i = 0; i < parts.length(); i++) {
+						if (i == parts.length() - 1) {
+							create_model(parts[i],parent->item);
+							break;
+						}
+						if (parent == nullptr) {
+							if (movie_tree.find(parts[i]) != movie_tree.end()) {
+								parent = movie_tree.at(parts[i]);
+								continue;
+							}
+							QTreeWidgetItem* widget = new QTreeWidgetItem(this->treeWidgetVideo);
+							widget->setText(0, parts[i]);
+							widget->setChildIndicatorPolicy(QTreeWidgetItem::ChildIndicatorPolicy::ShowIndicator);
+							auto item = std::make_shared<TreeItem>();
+							item->item = widget;
+							auto iter = movie_tree.insert({parts[i], item});
+							parent = item;
+							continue;
+						} else {
+							if (parent->children.find(parts[i]) != parent->children.end()) {
+								parent = parent->children.at(parts[i]);
+								continue;
+							}
+							QTreeWidgetItem* widget = new QTreeWidgetItem(parent->item);
+							widget->setText(0, parts[i]);
+							widget->setChildIndicatorPolicy(QTreeWidgetItem::ChildIndicatorPolicy::ShowIndicator);
+							auto item = std::make_shared<TreeItem>();
+							item->item = widget;
+							auto iter = parent->children.insert({parts[i], item});
+							parent = item;
+						}
+					}
+				} else {
+					create_model(model.getName(),this->treeWidgetVideo);
+				}
             }
         }
     }
@@ -829,7 +975,7 @@ void LibraryWidget::contextMenuTriggered(QAction* action)
     else if (this->toolBoxLibrary->currentIndex() == Library::AUDIO_PAGE_INDEX)
     {
         foreach (QTreeWidgetItem* item, this->treeWidgetAudio->selectedItems())
-            EventManager::getInstance().fireAddRudnownItemEvent(LibraryModel(item->text(1).toInt(), item->text(2), item->text(0),
+            EventManager::getInstance().fireAddRudnownItemEvent(LibraryModel(item->text(1).toInt(), item->text(2), item->text(7),
                                                                              item->text(3), item->text(4), item->text(5).toInt(),
                                                                              item->text(6)));
     }
@@ -843,7 +989,7 @@ void LibraryWidget::contextMenuTriggered(QAction* action)
     else if (this->toolBoxLibrary->currentIndex() == Library::MOVIE_PAGE_INDEX)
     {
         foreach (QTreeWidgetItem* item, this->treeWidgetVideo->selectedItems())
-            EventManager::getInstance().fireAddRudnownItemEvent(LibraryModel(item->text(1).toInt(), item->text(2), item->text(0),
+            EventManager::getInstance().fireAddRudnownItemEvent(LibraryModel(item->text(1).toInt(), item->text(2), item->text(7),
                                                                              item->text(3), item->text(4), item->text(5).toInt(),
                                                                              item->text(6)));
     }
@@ -854,14 +1000,14 @@ void LibraryWidget::contextMenuImageTriggered(QAction* action)
     if (action->text() == "Add image")
     {
         foreach (QTreeWidgetItem* item, this->treeWidgetImage->selectedItems())
-            EventManager::getInstance().fireAddRudnownItemEvent(LibraryModel(item->text(1).toInt(), item->text(2), item->text(0),
+            EventManager::getInstance().fireAddRudnownItemEvent(LibraryModel(item->text(1).toInt(), item->text(2), item->text(7),
                                                                              item->text(3), item->text(4), item->text(5).toInt(),
                                                                              item->text(6)));
     }
     else if (action->text() == "Add as image scroller")
     {
         foreach (QTreeWidgetItem* item, this->treeWidgetImage->selectedItems())
-            EventManager::getInstance().fireAddRudnownItemEvent(LibraryModel(item->text(1).toInt(), item->text(2), item->text(0),
+            EventManager::getInstance().fireAddRudnownItemEvent(LibraryModel(item->text(1).toInt(), item->text(2), item->text(7),
                                                                              item->text(3), "IMAGESCROLLER", item->text(5).toInt(),
                                                                              item->text(6)));
     }
@@ -922,11 +1068,11 @@ void LibraryWidget::itemDoubleClicked(QTreeWidgetItem* current, int index)
                                                                          current->text(3), current->text(4), current->text(5).toInt(),
                                                                          current->text(6)));
     else if (this->toolBoxLibrary->currentIndex() == Library::AUDIO_PAGE_INDEX)
-        EventManager::getInstance().fireAddRudnownItemEvent(LibraryModel(current->text(1).toInt(), current->text(2), current->text(0),
+        EventManager::getInstance().fireAddRudnownItemEvent(LibraryModel(current->text(1).toInt(), current->text(2), current->text(7),
                                                                          current->text(3), current->text(4), current->text(5).toInt(),
                                                                          current->text(6)));
     else if (this->toolBoxLibrary->currentIndex() == Library::STILL_PAGE_INDEX)
-        EventManager::getInstance().fireAddRudnownItemEvent(LibraryModel(current->text(1).toInt(), current->text(2), current->text(0),
+        EventManager::getInstance().fireAddRudnownItemEvent(LibraryModel(current->text(1).toInt(), current->text(2), current->text(7),
                                                                          current->text(3), current->text(4), current->text(5).toInt(),
                                                                          current->text(6)));
     else if (this->toolBoxLibrary->currentIndex() == Library::TEMPLATE_PAGE_INDEX)
@@ -934,7 +1080,7 @@ void LibraryWidget::itemDoubleClicked(QTreeWidgetItem* current, int index)
                                                                          current->text(3), current->text(4), current->text(5).toInt(),
                                                                          current->text(6)));
     else if (this->toolBoxLibrary->currentIndex() == Library::MOVIE_PAGE_INDEX)
-        EventManager::getInstance().fireAddRudnownItemEvent(LibraryModel(current->text(1).toInt(), current->text(2), current->text(0),
+        EventManager::getInstance().fireAddRudnownItemEvent(LibraryModel(current->text(1).toInt(), current->text(2), current->text(7),
                                                                          current->text(3), current->text(4), current->text(5).toInt(),
                                                                          current->text(6)));
     else if (this->toolBoxLibrary->currentIndex() == Library::DATA_PAGE_INDEX)
@@ -956,9 +1102,23 @@ void LibraryWidget::currentItemChanged(QTreeWidgetItem* current, QTreeWidgetItem
         return;
     }
 
-    this->model = QSharedPointer<LibraryModel>(new LibraryModel(current->text(1).toInt(), current->text(2), current->text(0),
-                                                                current->text(3), current->text(4), current->text(5).toInt(),
-                                                                current->text(6)));
+	if (this->toolBoxLibrary->currentIndex() == Library::MOVIE_PAGE_INDEX) {
+		this->model = QSharedPointer<LibraryModel>(new LibraryModel(current->text(1).toInt(), current->text(2), current->text(7),
+																	current->text(3), current->text(4), current->text(5).toInt(),
+																	current->text(6)));
+	} else if (this->toolBoxLibrary->currentIndex() == Library::AUDIO_PAGE_INDEX) {
+		this->model = QSharedPointer<LibraryModel>(new LibraryModel(current->text(1).toInt(), current->text(2), current->text(7),
+																	current->text(3), current->text(4), current->text(5).toInt(),
+																	current->text(6)));
+	} else if (this->toolBoxLibrary->currentIndex() == Library::STILL_PAGE_INDEX) {
+		this->model = QSharedPointer<LibraryModel>(new LibraryModel(current->text(1).toInt(), current->text(2), current->text(7),
+																	current->text(3), current->text(4), current->text(5).toInt(),
+																	current->text(6)));
+	} else {
+		this->model = QSharedPointer<LibraryModel>(new LibraryModel(current->text(1).toInt(), current->text(2), current->text(0),
+																	current->text(3), current->text(4), current->text(5).toInt(),
+																	current->text(6)));
+	}
 
     if (this->toolBoxLibrary->currentIndex() == Library::DATA_PAGE_INDEX)
         return;

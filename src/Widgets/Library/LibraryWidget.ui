@@ -355,6 +355,11 @@
            <string>Timecode</string>
           </property>
          </column>
+         <column>
+          <property name="text">
+           <string>ItemName</string>
+          </property>
+         </column>
         </widget>
        </item>
       </layout>
@@ -443,6 +448,11 @@
          <column>
           <property name="text">
            <string>Timecode</string>
+          </property>
+         </column>
+         <column>
+          <property name="text">
+           <string>ItemName</string>
           </property>
          </column>
         </widget>
@@ -632,6 +642,11 @@
          <column>
           <property name="text">
            <string>Timecode</string>
+          </property>
+         </column>
+         <column>
+          <property name="text">
+           <string>ItemName</string>
           </property>
          </column>
         </widget>
