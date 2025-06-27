@@ -80,7 +80,6 @@ target_link_libraries(shell PRIVATE
     Qt::Widgets
     Qt::Core5Compat
 
-    ${Boost_LIBRARIES}
     
     ${LIBVLC_LIBRARY}
     ${LIBVLCCORE_LIBRARY}

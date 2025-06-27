@@ -176,6 +176,7 @@ target_link_libraries(core PUBLIC
     Qt::Network
     Qt::Sql
     Qt::Widgets
+    Boost::property_tree
 )
 
 # Resources:

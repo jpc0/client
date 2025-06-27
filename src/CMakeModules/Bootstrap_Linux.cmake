@@ -3,8 +3,8 @@ function (add_external_dependencies PROJECT)
     # add_dependencies(PROJECT boost)
 endfunction()
 
-set (Boost_NO_WARN_NEW_VERSIONS 1)
-FIND_PACKAGE (Boost REQUIRED COMPONENTS thread REQUIRED)
+# set (Boost_NO_WARN_NEW_VERSIONS 1)
+# FIND_PACKAGE (Boost REQUIRED COMPONENTS thread REQUIRED)
 
 find_package(LibVLC REQUIRED)
 

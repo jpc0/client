@@ -11,6 +11,7 @@ set(CMAKE_INCLUDE_CURRENT_DIR ON)
 # Add custom cmake modules path
 LIST (APPEND CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/CMakeModules)
 
+include(CPM)
 include(ExternalProject)
 include(CasparCG_Util)
 
@@ -48,6 +49,15 @@ find_package(Qt6 REQUIRED COMPONENTS Core Gui Network Sql WebSockets Widgets Cor
 if (MSVC OR APPLE)
     qt_standard_project_setup()
 endif()
+
+CPMAddPackage(
+  NAME Boost
+  VERSION 1.88.0
+  URL https://github.com/boostorg/boost/releases/download/boost-1.88.0/boost-1.88.0-cmake.tar.gz
+  OPTIONS "BOOST_ENABLE_CMAKE ON" "BUILD_SHARED_LIBS OFF" "BOOST_INCLUDE_LIBRARIES thread\\\;asio\\\;ptr_container\\\;property_tree"
+  SYSTEM ON
+)
+
 
 
 add_subdirectory(Common)

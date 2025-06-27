@@ -24,5 +24,7 @@ target_link_libraries(gpi PUBLIC
     Qt::Core
     Qt::Gui
 
-    ${Boost_LIBRARIES}
+    Boost::asio
+    Boost::thread
+    Boost::ptr_container
 )

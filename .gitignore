@@ -11,3 +11,4 @@
 /src/.vs
 /src/cmake-build-*
 /src/.idea
+.cache/
